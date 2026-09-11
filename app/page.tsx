@@ -9,18 +9,18 @@ import {
 
 export default function Page() {
   return (
-    <Empty>
+    <Empty className="min-h-dvh">
       <EmptyHeader>
         <EmptyMedia>
           <Image
             src="/logo.svg"
-            alt="Logo"
+            alt="Logo"  
             width={48}
             height={48}
             priority
           />
         </EmptyMedia>
-        <EmptyTitle>What should we build today?</EmptyTitle>
+        <EmptyTitle className="text-2xl">What should we build today?</EmptyTitle>
         <EmptyDescription>
           Build your own racers, shooters, puzzles and whole worlds using your
           own words. If you can describe it, you can play it.
