@@ -1,6 +1,5 @@
 import Image from "next/image"
-import { UserButton } from "@clerk/nextjs"
-import { OrganizationSwitcher} from "@clerk/nextjs"
+import { OrganizationSwitcher, UserButton } from "@clerk/nextjs"
 import { auth } from "@clerk/nextjs/server"
 import {
   Empty,
