@@ -18,7 +18,10 @@ export const metadata: Metadata = {
   },
   description:
    "Describe a game and watch it come to life. Sandbox is an agentic three.js game builder that plans the scene, writes  the code, and streams playable worlds from plain english.",
-    
+  icons:{
+    icon: "/logo.svg",
+  },
+  
 }
 
 export default function RootLayout({
