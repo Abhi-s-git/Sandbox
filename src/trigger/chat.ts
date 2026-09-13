@@ -5,9 +5,28 @@ import { streamText } from "ai"
 
 import { db } from "@/lib/db"
 import { games } from "@/lib/db/schema"
+import { createGameSandbox } from "@/lib/daytona/utils"
 
 export const gameChat = chat.agent({
   id: "game-chat",
+
+  // Suspend immediately after each turn instead of staying warm for 30 s.
+  // The run frees compute as soon as onTurnComplete finishes, and the next
+  // user message boots a continuation run. This is correct for a chat that
+  // receives messages at human pace; the 30-second default is only useful
+  // when messages arrive in rapid succession (e.g. tool-approval flows or
+  // high-frequency bots).
+  idleTimeoutInSeconds: 0,
+
+  // ------------------------------------------------------------------
+  // Sandbox provisioning: fires once when the first message in a new
+  // chat arrives. Creates (or reuses) the Daytona sandbox for this
+  // game and seeds /home/daytona/game/index.html. Idempotent — safe
+  // to call even if a sandbox was already created by a prior run.
+  // ------------------------------------------------------------------
+  onChatStart: async ({ chatId }) => {
+    await createGameSandbox(chatId)
+  },
 
   // ------------------------------------------------------------------
   // Persistence: DB is the source of truth.
