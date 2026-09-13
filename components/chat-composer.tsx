@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useTransition } from "react"
+
 import {
   ArrowUpIcon,
   ChevronDownIcon,
@@ -25,6 +27,7 @@ import {
   InputGroupAddon,
   InputGroupTextarea,
 } from "@/components/ui/input-group"
+import { createGame } from "@/lib/games/action"
 
 const suggestions = [
   { icon: WandSparklesIcon, label: "Voxel survival" },
@@ -37,10 +40,32 @@ const suggestions = [
 ]
 
 function ChatComposer() {
+  const [title, setTitle] = useState("")
+  const [isPending, startTransition] = useTransition()
+
+  function submit(value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || isPending) return
+    startTransition(async () => {
+      await createGame(trimmed)
+      setTitle("")
+    })
+  }
+
   return (
-    <div className="flex w-full flex-col gap-4">
+    <form
+      className="flex w-full flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        submit(title)
+      }}
+    >
       <InputGroup className="items-stretch">
-        <InputGroupTextarea placeholder="Describe the game you want to build..." />
+        <InputGroupTextarea
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Describe the game you want to build..."
+        />
         <InputGroupAddon align="block-end" className="justify-between">
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="xs" />}>
@@ -55,7 +80,12 @@ function ChatComposer() {
               <DropdownMenuItem>Claude Sonnet</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="icon" className="rounded-full">
+          <Button
+            type="submit"
+            size="icon"
+            className="rounded-full"
+            disabled={isPending}
+          >
             <ArrowUpIcon />
           </Button>
         </InputGroupAddon>
@@ -63,13 +93,19 @@ function ChatComposer() {
 
       <div className="flex flex-wrap justify-center gap-2">
         {suggestions.map(({ icon: Icon, label }) => (
-          <Button key={label} variant="secondary" size="sm">
+          <Button
+            key={label}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => submit(label)}
+          >
             <Icon />
             {label}
           </Button>
         ))}
       </div>
-    </div>
+    </form>
   )
 }
 
