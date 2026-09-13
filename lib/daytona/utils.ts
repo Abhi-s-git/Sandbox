@@ -19,12 +19,15 @@ const INITIAL_HTML = `<!DOCTYPE html>
  * game already has a sandboxId). Seeds /home/daytona/game/index.html with a
  * blank game shell, then persists the sandbox ID back to the database.
  *
- * All errors are logged via Trigger.dev logger before being re-thrown so they
- * appear in run logs and are not silently swallowed by the onChatStart hook.
+ * index.html is written via executeCommand (printf) rather than fs.uploadFile.
+ * uploadFile relies on a dynamic require('form-data') that fails inside the
+ * bundled ESM worker because require() is not defined at runtime.
  *
  * @returns The sandbox ID (new or pre-existing).
  */
 export async function createGameSandbox(gameId: string): Promise<string> {
+  logger.log("CREATE GAME SANDBOX ENTERED", { gameId })
+
   // ── idempotency check ──────────────────────────────────────────────────────
   const game = await db.query.games.findFirst({
     where: eq(games.id, gameId),
@@ -54,8 +57,6 @@ export async function createGameSandbox(gameId: string): Promise<string> {
       labels: { gameId },
     })
 
-    // Defensive: SDK types sandbox.id as string, but guard against an
-    // unexpected empty value before we commit it to the database.
     if (!sandbox.id) {
       throw new Error("Daytona sandbox was created but returned no id")
     }
@@ -63,26 +64,30 @@ export async function createGameSandbox(gameId: string): Promise<string> {
     sandboxId = sandbox.id
     logger.info("createGameSandbox: sandbox created", { gameId, sandboxId })
 
-    // ── seed index.html ──────────────────────────────────────────────────────
-    const mkdirResult = await sandbox.process.executeCommand(
-      "mkdir -p /home/daytona/game",
+    // ── seed index.html via shell command ────────────────────────────────────
+    // We use printf + shell redirection instead of fs.uploadFile because
+    // uploadFile requires form-data (a CJS module loaded via require()), which
+    // is not available inside the bundled ESM worker at runtime.
+    const escaped = INITIAL_HTML
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "'\\''")
+
+    const writeResult = await sandbox.process.executeCommand(
+      `mkdir -p /home/daytona/game && printf '%s' '${escaped}' > /home/daytona/game/index.html`,
     )
-    if (mkdirResult.exitCode !== 0) {
+
+    if (writeResult.exitCode !== 0) {
       throw new Error(
-        `mkdir failed (exit ${mkdirResult.exitCode}): ${mkdirResult.result}`,
+        `Failed to seed index.html (exit ${writeResult.exitCode}): ${writeResult.result}`,
       )
     }
-
-    await sandbox.fs.uploadFile(
-      Buffer.from(INITIAL_HTML),
-      "/home/daytona/game/index.html",
-    )
 
     logger.info("createGameSandbox: index.html seeded", { gameId, sandboxId })
   } catch (err) {
     logger.error("createGameSandbox: failed to provision sandbox", {
       gameId,
       error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
     })
     throw err
   }
@@ -110,6 +115,7 @@ export async function createGameSandbox(gameId: string): Promise<string> {
       gameId,
       sandboxId,
       error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
     })
     throw err
   }

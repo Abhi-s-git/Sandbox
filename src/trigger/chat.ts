@@ -1,4 +1,5 @@
 import { chat, upsertIncomingMessage } from "@trigger.dev/sdk/ai"
+import { logger } from "@trigger.dev/sdk"
 import { google } from "@ai-sdk/google"
 import { eq } from "drizzle-orm"
 import { streamText } from "ai"
@@ -36,6 +37,7 @@ export const gameChat = chat.agent({
   hydrateMessages: async ({ chatId, trigger, incomingMessages }) => {
     // Provision the sandbox on turn 0 (no-op on all subsequent turns
     // because createGameSandbox checks sandboxId before creating).
+    logger.log("CREATE GAME SANDBOX CALLED", { chatId })
     await createGameSandbox(chatId)
 
     const record = await db.query.games.findFirst({
