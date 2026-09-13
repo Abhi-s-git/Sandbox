@@ -15,9 +15,25 @@ import {
 } from "@/components/ui/message-scroller"
 
 function ChatThread() {
-  const { messages, status, sendMessage } = useChatContext()
+  const { messages, status, sendMessage, stop } = useChatContext()
 
-  const isDisabled = status === "submitted" || status === "streaming"
+  // Disable text input and the submit action while a request is in-flight,
+  // but keep the composer mounted so the stop button remains accessible.
+  const isStreaming = status === "submitted" || status === "streaming"
+
+  // Build a key for each position that is unique within this render.
+  // When message.id is present and hasn't appeared yet, use it as-is so
+  // React can reconcile existing DOM nodes. When it has already appeared
+  // (duplicate persisted IDs) or is absent, fall back to `<id>:<index>`
+  // or `msg-<index>` so the key is still stable relative to the list order.
+  const seenIds = new Set<string>()
+  const messageKeys = messages.map((message, index) => {
+    if (message.id && !seenIds.has(message.id)) {
+      seenIds.add(message.id)
+      return message.id
+    }
+    return message.id ? `${message.id}:${index}` : `msg-${index}`
+  })
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -27,7 +43,7 @@ function ChatThread() {
             <MessageScrollerContent className="mx-auto w-full max-w-2xl px-4 py-6">
               {messages.map((message, index) => (
                 <MessageScrollerItem
-                  key={message.id || `msg-${index}`}
+                  key={messageKeys[index]}
                   scrollAnchor={index === messages.length - 1}
                 >
                   <Message align={message.role === "user" ? "end" : "start"}>
@@ -72,7 +88,8 @@ function ChatThread() {
         <div className="mx-auto w-full max-w-2xl">
           <ChatComposer
             onSubmit={(text) => sendMessage({ text })}
-            disabled={isDisabled}
+            onStop={stop}
+            isStreaming={isStreaming}
           />
         </div>
       </div>

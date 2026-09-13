@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -15,9 +16,16 @@ import type { gameChat } from "@/src/trigger/chat"
 import { mintGameChatToken, startGameChatSession } from "@/lib/games/chat-actions"
 
 type ChatContextValue = {
+  gameId: string
   messages: ReturnType<typeof useChat>["messages"]
   status: ReturnType<typeof useChat>["status"]
   sendMessage: ReturnType<typeof useChat>["sendMessage"]
+  /**
+   * Stops the current generation. Sends the stop signal to the backend task
+   * (via transport.stopGeneration) AND updates the frontend status (via
+   * useChat's stop). Both must be called together per the Trigger.dev docs.
+   */
+  stop: () => void
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -49,7 +57,7 @@ function ChatProvider({
       startGameChatSession({ chatId, clientData }),
   })
 
-  const { messages, status, sendMessage } = useChat({
+  const { messages, status, sendMessage, stop: aiStop } = useChat({
     id: gameId,
     messages: initialMessages,
     transport,
@@ -58,6 +66,16 @@ function ChatProvider({
     // already-seen events and reconnect to an in-progress turn if one exists.
     resume: !!initialMessages && initialMessages.length > 0,
   })
+
+  // Combine the two required stop calls:
+  // 1. transport.stopGeneration — sends the stop signal to the backend task,
+  //    aborting the server-side streamText call and closing the SSE connection.
+  //    Required even after a page refresh (useChat's own stop() isn't enough).
+  // 2. aiStop — updates the frontend status to "ready" and fires onFinish.
+  const stop = useCallback(() => {
+    transport.stopGeneration(gameId)
+    aiStop()
+  }, [transport, gameId, aiStop])
 
   // Send the initial prompt exactly once — only when there are no stored messages.
   // The cleanup resets the flag so React Strict Mode's double-invoke doesn't
@@ -76,7 +94,7 @@ function ChatProvider({
   }, [initialPrompt, sendMessage])
 
   return (
-    <ChatContext.Provider value={{ messages, status, sendMessage }}>
+    <ChatContext.Provider value={{ gameId, messages, status, sendMessage, stop }}>
       {children}
     </ChatContext.Provider>
   )

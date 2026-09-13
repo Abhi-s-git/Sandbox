@@ -6,6 +6,7 @@ import {
   ArrowUpIcon,
   ChevronDownIcon,
   LayoutGridIcon,
+  SquareIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -34,10 +35,28 @@ type ChatComposerProps = {
    * Used inside an existing game's chat thread.
    */
   onSubmit?: (text: string) => void
+  /**
+   * Called when the stop button is pressed while the model is generating.
+   * Wires transport.stopGeneration + useChat stop together (from ChatProvider).
+   * Only relevant when `isStreaming` is true.
+   */
+  onStop?: () => void
+  /**
+   * Whether the model is currently generating a response.
+   * When true the submit button becomes a stop button (SquareIcon).
+   * The textarea is also disabled so the user cannot edit mid-stream.
+   */
+  isStreaming?: boolean
   disabled?: boolean
 }
 
-function ChatComposer({ onGameCreated, onSubmit, disabled }: ChatComposerProps) {
+function ChatComposer({
+  onGameCreated,
+  onSubmit,
+  onStop,
+  isStreaming = false,
+  disabled,
+}: ChatComposerProps) {
   const [title, setTitle] = useState("")
   const [isPending, startTransition] = useTransition()
 
@@ -67,7 +86,11 @@ function ChatComposer({ onGameCreated, onSubmit, disabled }: ChatComposerProps) 
       className="flex w-full flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
-        submit(title)
+        // While streaming the form submit does nothing — the stop button
+        // handles the cancel via its own onClick handler.
+        if (!isStreaming) {
+          submit(title)
+        }
       }}
     >
       <InputGroup className="items-stretch">
@@ -75,7 +98,7 @@ function ChatComposer({ onGameCreated, onSubmit, disabled }: ChatComposerProps) 
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Describe the game you want to build..."
-          disabled={isDisabled}
+          disabled={isDisabled || isStreaming}
         />
         <InputGroupAddon align="block-end" className="justify-between">
           <DropdownMenu>
@@ -91,14 +114,27 @@ function ChatComposer({ onGameCreated, onSubmit, disabled }: ChatComposerProps) 
               <DropdownMenuItem>Claude Sonnet</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            type="submit"
-            size="icon"
-            className="rounded-full"
-            disabled={isDisabled}
-          >
-            <ArrowUpIcon />
-          </Button>
+          {isStreaming ? (
+            <Button
+              type="button"
+              size="icon"
+              className="rounded-full"
+              onClick={onStop}
+              aria-label="Stop generating"
+            >
+              <SquareIcon />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="icon"
+              className="rounded-full"
+              disabled={isDisabled}
+              aria-label="Send message"
+            >
+              <ArrowUpIcon />
+            </Button>
+          )}
         </InputGroupAddon>
       </InputGroup>
     </form>
