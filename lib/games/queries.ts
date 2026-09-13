@@ -22,3 +22,20 @@ export async function listGames() {
     },
   })
 }
+
+export async function getGame(id: string) {
+  const { orgId } = await auth.protect()
+
+  if (!orgId) {
+    return null
+  }
+
+  return db.query.games.findFirst({
+    where: (t, { and }) => and(eq(t.id, id), eq(t.orgId, orgId)),
+    columns: {
+      id: true,
+      title: true,
+      messages: true,
+    },
+  })
+}

@@ -3,6 +3,7 @@
 import Image from "next/image"
 
 import { ChatComposer } from "@/components/chat-composer"
+import { useChatContext } from "@/components/chat-provider"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import { Message, MessageAvatar, MessageContent } from "@/components/ui/message"
 import {
@@ -13,50 +14,26 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller"
 
-type Turn = {
-  role: "assistant" | "user"
-  text: string
-}
-
-const conversation: Turn[] = [
-  {
-    role: "assistant",
-    text: "Hey! What kind of game are we building today?",
-  },
-  {
-    role: "user",
-    text: "A fast-paced voxel survival game with procedurally generated islands.",
-  },
-  {
-    role: "assistant",
-    text: "Love it. I'll start with the terrain generator and a day/night cycle.",
-  },
-  {
-    role: "user",
-    text: "Great, and make sure there's a grappling hook for traversal.",
-  },
-  {
-    role: "assistant",
-    text: "On it — adding the grappling hook and a crafting bench now.",
-  },
-]
-
 function ChatThread() {
+  const { messages, status, sendMessage } = useChatContext()
+
+  const isDisabled = status === "submitted" || status === "streaming"
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <MessageScrollerProvider>
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
             <MessageScrollerContent className="mx-auto w-full max-w-2xl px-4 py-6">
-              {conversation.map((turn, index) => (
+              {messages.map((message, index) => (
                 <MessageScrollerItem
-                  key={index}
-                  scrollAnchor={index === conversation.length - 1}
+                  key={message.id || `msg-${index}`}
+                  scrollAnchor={index === messages.length - 1}
                 >
-                  <Message align={turn.role === "user" ? "end" : "start"}>
-                    {turn.role === "assistant" ? (
-                      <MessageAvatar className="size-8 bg-transparent self-start rounded-lg">
-                        <Image  
+                  <Message align={message.role === "user" ? "end" : "start"}>
+                    {message.role === "assistant" ? (
+                      <MessageAvatar className="size-8 self-start rounded-lg bg-transparent">
+                        <Image
                           src="/logo.svg"
                           alt="Sandbox"
                           width={32}
@@ -68,9 +45,19 @@ function ChatThread() {
                     <MessageContent>
                       <BubbleGroup>
                         <Bubble
-                          variant={turn.role === "user" ? "secondary" : "ghost"}
+                          variant={
+                            message.role === "user" ? "secondary" : "ghost"
+                          }
                         >
-                          <BubbleContent>{turn.text}</BubbleContent>
+                          <BubbleContent>
+                            {message.parts
+                              .filter((part) => part.type === "text")
+                              .map((part, i) => (
+                                <span key={i}>
+                                  {(part as { type: "text"; text: string }).text}
+                                </span>
+                              ))}
+                          </BubbleContent>
                         </Bubble>
                       </BubbleGroup>
                     </MessageContent>
@@ -83,7 +70,10 @@ function ChatThread() {
       </MessageScrollerProvider>
       <div className="shrink-0 px-4 py-4">
         <div className="mx-auto w-full max-w-2xl">
-          <ChatComposer />
+          <ChatComposer
+            onSubmit={(text) => sendMessage({ text })}
+            disabled={isDisabled}
+          />
         </div>
       </div>
     </div>

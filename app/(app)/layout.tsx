@@ -16,8 +16,8 @@ export default async function AppLayout({
   return (
     <SidebarProvider>
       <AppSidebar games={games} />
-      <SidebarInset>
-        <SidebarTrigger />
+      <SidebarInset className="h-svh overflow-hidden">
+        <SidebarTrigger className="shrink-0" />
         {children}
       </SidebarInset>
     </SidebarProvider>

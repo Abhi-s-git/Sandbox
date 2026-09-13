@@ -22,18 +22,45 @@ import {
 } from "@/components/ui/input-group"
 import { createGame } from "@/lib/games/action"
 
-function ChatComposer() {
+type ChatComposerProps = {
+  /**
+   * Called with the trimmed text after a new game is created (home page flow).
+   * When omitted, ChatComposer sends directly via the ChatProvider context
+   * (game detail page flow — no createGame call).
+   */
+  onGameCreated?: (title: string, game: { id: string }) => void
+  /**
+   * When true, skip createGame entirely and call onSubmit directly.
+   * Used inside an existing game's chat thread.
+   */
+  onSubmit?: (text: string) => void
+  disabled?: boolean
+}
+
+function ChatComposer({ onGameCreated, onSubmit, disabled }: ChatComposerProps) {
   const [title, setTitle] = useState("")
   const [isPending, startTransition] = useTransition()
 
   function submit(value: string) {
     const trimmed = value.trim()
-    if (!trimmed || isPending) return
-    startTransition(async () => {
-      await createGame(trimmed)
+    if (!trimmed || isPending || disabled) return
+
+    if (onSubmit) {
+      // In-game composer: send directly, no game creation
+      onSubmit(trimmed)
       setTitle("")
+      return
+    }
+
+    // Home page: create a new game, then notify parent
+    startTransition(async () => {
+      const game = await createGame(trimmed)
+      setTitle("")
+      onGameCreated?.(trimmed, game)
     })
   }
+
+  const isDisabled = isPending || disabled
 
   return (
     <form
@@ -48,6 +75,7 @@ function ChatComposer() {
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Describe the game you want to build..."
+          disabled={isDisabled}
         />
         <InputGroupAddon align="block-end" className="justify-between">
           <DropdownMenu>
@@ -67,7 +95,7 @@ function ChatComposer() {
             type="submit"
             size="icon"
             className="rounded-full"
-            disabled={isPending}
+            disabled={isDisabled}
           >
             <ArrowUpIcon />
           </Button>
