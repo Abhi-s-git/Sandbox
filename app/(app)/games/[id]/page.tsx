@@ -1,9 +1,11 @@
+import { ChatThread } from "@/components/chat-thread"
+
 export default async function GamePage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  const { id } = await params
+  await params
 
-  return <p>{id}</p>
+  return <ChatThread />
 }

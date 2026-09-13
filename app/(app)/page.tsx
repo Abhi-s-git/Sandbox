@@ -1,5 +1,6 @@
 import Image from "next/image"
 import { auth } from "@clerk/nextjs/server"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyContent,
@@ -9,6 +10,13 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ChatComposer } from "@/components/chat-composer"
+import { createGame } from "@/lib/games/action"
+import { suggestions } from "@/lib/games/suggestions"
+
+async function createGameFromSuggestion(formData: FormData) {
+  "use server"
+  await createGame(String(formData.get("title") ?? ""))
+}
 
 export default async function Page() {
   await auth.protect()
@@ -32,8 +40,19 @@ export default async function Page() {
             own words. If you can describe it, you can play it.
           </EmptyDescription>
         </EmptyHeader>
-        <EmptyContent className="max-w-xl">
+        <EmptyContent className="max-w-xl gap-6">
           <ChatComposer />
+          <div className="flex flex-wrap justify-center gap-2">
+            {suggestions.map(({ icon: Icon, label }) => (
+              <form key={label} action={createGameFromSuggestion}>
+                <input type="hidden" name="title" value={label} />
+                <Button type="submit" variant="outline" size="sm">
+                  <Icon />
+                  {label}
+                </Button>
+              </form>
+            ))}
+          </div>
         </EmptyContent>
       </Empty>
     </>

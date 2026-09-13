@@ -5,14 +5,7 @@ import { useState, useTransition } from "react"
 import {
   ArrowUpIcon,
   ChevronDownIcon,
-  CodeXmlIcon,
-  CrosshairIcon,
-  Gamepad2Icon,
   LayoutGridIcon,
-  PlusIcon,
-  ShuffleIcon,
-  TrendingUpIcon,
-  WandSparklesIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -28,16 +21,6 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group"
 import { createGame } from "@/lib/games/action"
-
-const suggestions = [
-  { icon: WandSparklesIcon, label: "Voxel survival" },
-  { icon: CodeXmlIcon, label: "Ink samurai duel" },
-  { icon: ShuffleIcon, label: "Comic-book firefight" },
-  { icon: Gamepad2Icon, label: "Realistic battlefield" },
-  { icon: CrosshairIcon, label: "Fight-first shooter" },
-  { icon: TrendingUpIcon, label: "Jungle expedition drive" },
-  { icon: PlusIcon, label: "Sunny kingdom platformer" },
-]
 
 function ChatComposer() {
   const [title, setTitle] = useState("")
@@ -90,21 +73,6 @@ function ChatComposer() {
           </Button>
         </InputGroupAddon>
       </InputGroup>
-
-      <div className="flex flex-wrap justify-center gap-2">
-        {suggestions.map(({ icon: Icon, label }) => (
-          <Button
-            key={label}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => submit(label)}
-          >
-            <Icon />
-            {label}
-          </Button>
-        ))}
-      </div>
     </form>
   )
 }
