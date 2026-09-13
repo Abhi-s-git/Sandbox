@@ -19,22 +19,25 @@ export const gameChat = chat.agent({
   idleTimeoutInSeconds: 0,
 
   // ------------------------------------------------------------------
-  // Sandbox provisioning: fires once when the first message in a new
-  // chat arrives. Creates (or reuses) the Daytona sandbox for this
-  // game and seeds /home/daytona/game/index.html. Idempotent — safe
-  // to call even if a sandbox was already created by a prior run.
-  // ------------------------------------------------------------------
-  onChatStart: async ({ chatId }) => {
-    await createGameSandbox(chatId)
-  },
-
-  // ------------------------------------------------------------------
   // Persistence: DB is the source of truth.
   // hydrateMessages replaces the built-in snapshot+replay accumulator.
   // It loads history from the DB on every turn, upserts the incoming
   // message, and returns the canonical chain to the runtime.
+  //
+  // Sandbox provisioning also lives here rather than in onChatStart.
+  // Reason: with idleTimeoutInSeconds: 0 + hydrateMessages registered,
+  // every run after the first is a continuation run, and onChatStart
+  // does NOT fire on continuation runs. hydrateMessages fires on every
+  // turn — including turn 0 of a brand-new chat — so it is the only
+  // reliable place to run once-per-chat setup. createGameSandbox is
+  // idempotent: it reads sandboxId first and returns immediately if the
+  // sandbox already exists, so calling it every turn is safe.
   // ------------------------------------------------------------------
   hydrateMessages: async ({ chatId, trigger, incomingMessages }) => {
+    // Provision the sandbox on turn 0 (no-op on all subsequent turns
+    // because createGameSandbox checks sandboxId before creating).
+    await createGameSandbox(chatId)
+
     const record = await db.query.games.findFirst({
       where: eq(games.id, chatId),
       columns: { messages: true },
