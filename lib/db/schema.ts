@@ -8,6 +8,8 @@ export const games = pgTable(
     orgId: text("org_id").notNull(),
     title: text("title").notNull(),
     messages: jsonb("messages").$type<UIMessage[]>().notNull().default([]),
+    /** Stream resume cursor — persisted by onTurnComplete alongside messages */
+    lastEventId: text("last_event_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

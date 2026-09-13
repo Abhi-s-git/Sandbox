@@ -1,5 +1,8 @@
+"use client"
+
+import { useTransition } from "react"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { auth } from "@clerk/nextjs/server"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -13,13 +16,20 @@ import { ChatComposer } from "@/components/chat-composer"
 import { createGame } from "@/lib/games/action"
 import { suggestions } from "@/lib/games/suggestions"
 
-async function createGameFromSuggestion(formData: FormData) {
-  "use server"
-  await createGame(String(formData.get("title") ?? ""))
-}
+export default function Page() {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
 
-export default async function Page() {
-  await auth.protect()
+  function handleGameCreated(prompt: string, game: { id: string }) {
+    router.push(`/games/${game.id}?prompt=${encodeURIComponent(prompt)}`)
+  }
+
+  function handleSuggestion(label: string) {
+    startTransition(async () => {
+      const game = await createGame(label)
+      router.push(`/games/${game.id}?prompt=${encodeURIComponent(label)}`)
+    })
+  }
 
   return (
     <>
@@ -28,7 +38,7 @@ export default async function Page() {
           <EmptyMedia>
             <Image
               src="/logo.svg"
-              alt="Logo"  
+              alt="Logo"
               width={48}
               height={48}
               priority
@@ -41,16 +51,20 @@ export default async function Page() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="max-w-xl gap-6">
-          <ChatComposer />
+          <ChatComposer onGameCreated={handleGameCreated} />
           <div className="flex flex-wrap justify-center gap-2">
             {suggestions.map(({ icon: Icon, label }) => (
-              <form key={label} action={createGameFromSuggestion}>
-                <input type="hidden" name="title" value={label} />
-                <Button type="submit" variant="outline" size="sm">
-                  <Icon />
-                  {label}
-                </Button>
-              </form>
+              <Button
+                key={label}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isPending}
+                onClick={() => handleSuggestion(label)}
+              >
+                <Icon />
+                {label}
+              </Button>
             ))}
           </div>
         </EmptyContent>
