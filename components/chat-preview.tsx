@@ -4,12 +4,21 @@ import { useEffect, useState } from "react"
 
 interface ChatPreviewProps {
   gameId: string
+  /**
+   * Incremented by ChatProvider each time a streaming turn completes.
+   * Used as the iframe key so the browser reloads the preview after every
+   * turn without fetching a new proxy URL from the API.
+   */
+  revision?: number
 }
 
-export function ChatPreview({ gameId }: ChatPreviewProps) {
+export function ChatPreview({ gameId, revision = 0 }: ChatPreviewProps) {
   const [proxyUrl, setProxyUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Fetch the proxy URL once per gameId. The URL itself never changes —
+  // only the iframe content changes after each turn, so we reload the
+  // iframe via the `key` prop rather than re-fetching the URL.
   useEffect(() => {
     let cancelled = false
 
@@ -47,6 +56,9 @@ export function ChatPreview({ gameId }: ChatPreviewProps) {
 
   return (
     <iframe
+      // Changing the key unmounts and remounts the iframe, forcing the
+      // browser to reload the Daytona preview after each completed turn.
+      key={revision}
       src={proxyUrl}
       className="h-full w-full border-0"
       title="Game preview"

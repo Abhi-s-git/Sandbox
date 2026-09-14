@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from "react"
 import { useChat } from "@ai-sdk/react"
@@ -26,6 +27,12 @@ type ChatContextValue = {
    * useChat's stop). Both must be called together per the Trigger.dev docs.
    */
   stop: () => void
+  /**
+   * Increments each time a streaming turn transitions to "ready".
+   * Consumers can use this as a React key to force a remount (e.g. reload
+   * the preview iframe) exactly once after each completed turn.
+   */
+  revision: number
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -67,6 +74,18 @@ function ChatProvider({
     resume: !!initialMessages && initialMessages.length > 0,
   })
 
+  // Increment revision each time a completed turn lands (streaming → ready).
+  // "submitted" is the brief window between send and first chunk — we only
+  // want the transition that means the turn is fully done.
+  const [revision, setRevision] = useState(0)
+  const prevStatus = useRef(status)
+  useEffect(() => {
+    if (prevStatus.current === "streaming" && status === "ready") {
+      setRevision((r) => r + 1)
+    }
+    prevStatus.current = status
+  }, [status])
+
   // Combine the two required stop calls:
   // 1. transport.stopGeneration — sends the stop signal to the backend task,
   //    aborting the server-side streamText call and closing the SSE connection.
@@ -94,7 +113,7 @@ function ChatProvider({
   }, [initialPrompt, sendMessage])
 
   return (
-    <ChatContext.Provider value={{ gameId, messages, status, sendMessage, stop }}>
+    <ChatContext.Provider value={{ gameId, messages, status, sendMessage, stop, revision }}>
       {children}
     </ChatContext.Provider>
   )

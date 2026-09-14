@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { Check, CircleSlash, Clock, Loader, X } from "lucide-react"
+import { Check, Circle, X } from "lucide-react"
 
 import { ChatComposer } from "@/components/chat-composer"
 import { useChatContext } from "@/components/chat-provider"
@@ -26,24 +26,82 @@ type ToolState =
   | "output-error"
   | "output-denied"
 
+/** Partial input captured during or after streaming. */
+interface ToolInput {
+  path?: string
+  [key: string]: unknown
+}
+
 interface ToolPart {
-  type: string // "tool-write_file", "tool-replace_text", etc.
+  type: string // "tool-write_file", "tool-read_file", etc.
   toolCallId: string
   toolName: string
   state: ToolState
+  input?: ToolInput
   errorText?: string
 }
 
-/** Turn a snake_case tool name into a readable label, e.g. "write_file" → "Write file" */
-function formatToolName(name: string): string {
-  return name.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+// ── Label helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Strips the absolute Daytona game-dir prefix and returns just the
+ * filename / relative path the user cares about.
+ * e.g. "/home/daytona/game/assets/player.js" → "assets/player.js"
+ *      "index.html"                           → "index.html"
+ */
+function stripGameDir(p: string): string {
+  return p.replace(/^\/home\/daytona\/game\/?/, "")
 }
 
-function ToolCallMarker({ part }: { part: ToolPart }) {
-  const label = formatToolName(part.toolName)
+/**
+ * Returns the display path for a tool part, or an empty string when none
+ * is available yet (e.g. during input-streaming).
+ */
+function getPath(part: ToolPart): string {
+  const raw = part.input?.path
+  if (typeof raw !== "string" || raw === "") return ""
+  return stripGameDir(raw) || raw
+}
 
+/**
+ * Returns the human-readable verb phrase for a tool in the given state.
+ *
+ * Active (running):   "Reading index.html"
+ * Done:               "Read index.html"
+ * Failed/denied:      "Read index.html"   (same past tense)
+ */
+function toolLabel(part: ToolPart): string {
+  const filePath = getPath(part)
+  const isActive =
+    part.state === "input-streaming" ||
+    part.state === "input-available" ||
+    part.state === "approval-requested" ||
+    part.state === "approval-responded"
+
+  const labels: Record<string, { active: string; done: string }> = {
+    write_file:   { active: "Writing",  done: "Wrote"    },
+    read_file:    { active: "Reading",  done: "Read"     },
+    replace_text: { active: "Editing",  done: "Edited"   },
+    list_files:   { active: "Listing",  done: "Listed"   },
+    delete_file:  { active: "Deleting", done: "Deleted"  },
+  }
+
+  const entry = labels[part.toolName]
+  const verb = entry
+    ? isActive
+      ? entry.active
+      : entry.done
+    : // Fallback for unknown tools
+      part.toolName.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+
+  return filePath ? `${verb} ${filePath}` : verb
+}
+
+// ── ToolCallMarker ────────────────────────────────────────────────────────────
+
+function ToolCallMarker({ part }: { part: ToolPart }) {
   switch (part.state) {
-    // ── Done ────────────────────────────────────────────────────────────────
+    // ── Done ─────────────────────────────────────────────────────────────────
     case "output-available":
       return (
         <Marker>
@@ -51,12 +109,12 @@ function ToolCallMarker({ part }: { part: ToolPart }) {
             <Check className="text-emerald-500" />
           </MarkerIcon>
           <MarkerContent className="text-emerald-600 dark:text-emerald-400">
-            {label}
+            {toolLabel(part)}
           </MarkerContent>
         </Marker>
       )
 
-    // ── Failed ───────────────────────────────────────────────────────────────
+    // ── Failed ────────────────────────────────────────────────────────────────
     case "output-error":
       return (
         <Marker>
@@ -64,7 +122,7 @@ function ToolCallMarker({ part }: { part: ToolPart }) {
             <X className="text-destructive" />
           </MarkerIcon>
           <MarkerContent className="text-destructive">
-            {label}
+            {toolLabel(part)}
             {part.errorText ? (
               <span className="ml-1 font-normal text-muted-foreground">
                 — {part.errorText}
@@ -74,47 +132,32 @@ function ToolCallMarker({ part }: { part: ToolPart }) {
         </Marker>
       )
 
-    // ── Denied ───────────────────────────────────────────────────────────────
+    // ── Denied ────────────────────────────────────────────────────────────────
     case "output-denied":
       return (
         <Marker>
           <MarkerIcon>
-            <CircleSlash className="text-muted-foreground" />
+            <X className="text-muted-foreground" />
           </MarkerIcon>
           <MarkerContent className="text-muted-foreground line-through">
-            {label}
+            {toolLabel(part)}
           </MarkerContent>
         </Marker>
       )
 
-    // ── Waiting for approval ──────────────────────────────────────────────────
+    // ── Active (input-streaming, input-available, approval-*, running) ────────
     case "approval-requested":
-      return (
-        <Marker>
-          <MarkerIcon>
-            <Clock className="text-amber-500" />
-          </MarkerIcon>
-          <MarkerContent className="text-amber-600 dark:text-amber-400">
-            {label}
-            <span className="ml-1 font-normal text-muted-foreground">
-              — awaiting approval
-            </span>
-          </MarkerContent>
-        </Marker>
-      )
-
-    // ── Approval decided, running ─────────────────────────────────────────────
     case "approval-responded":
-    // ── Active / streaming ────────────────────────────────────────────────────
     case "input-streaming":
     case "input-available":
     default:
       return (
         <Marker>
           <MarkerIcon>
-            <Loader className="animate-spin text-muted-foreground" />
+            {/* Hollow circle — matches the ◌ glyph in the reference */}
+            <Circle className="text-muted-foreground opacity-40" />
           </MarkerIcon>
-          <MarkerContent>{label}</MarkerContent>
+          <MarkerContent>{toolLabel(part)}</MarkerContent>
         </Marker>
       )
   }
