@@ -30,7 +30,17 @@ export async function GET(
 
   await startGameServer(game.sandboxId)
 
-  const origin = new URL(req.url).origin
+  // Derive the public origin from forwarded headers set by Railway (and any
+  // other reverse proxy). Falling back to req.url.origin works for local dev
+  // where no proxy is involved, but in production req.url carries the internal
+  // host (e.g. http://0.0.0.0:3000) which the browser cannot reach.
+  const headers = req.headers
+  const forwardedHost = headers.get("x-forwarded-host")
+  const forwardedProto = headers.get("x-forwarded-proto")?.split(",")[0].trim()
+  const origin = forwardedHost
+    ? `${forwardedProto ?? "https"}://${forwardedHost}`
+    : new URL(req.url).origin
+
   const proxyUrl = `${origin}/api/games/${id}/preview/content`
 
   return NextResponse.json({ url: proxyUrl })
