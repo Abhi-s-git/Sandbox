@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { ChatProvider } from "@/components/chat-provider"
-import { ChatThread } from "@/components/chat-thread"
+import { GameChat } from "@/components/game-chat"
 import { getGame } from "@/lib/games/queries"
 
 export default async function GamePage({
@@ -29,7 +29,7 @@ export default async function GamePage({
       initialMessages={game.messages}
       initialPrompt={initialPrompt}
     >
-      <ChatThread />
+      <GameChat gameId={game.id} sandboxId={game.sandboxId ?? null} />
     </ChatProvider>
   )
 }

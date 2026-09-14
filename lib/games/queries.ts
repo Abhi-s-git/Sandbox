@@ -36,6 +36,7 @@ export async function getGame(id: string) {
       id: true,
       title: true,
       messages: true,
+      sandboxId: true,
     },
   })
 }

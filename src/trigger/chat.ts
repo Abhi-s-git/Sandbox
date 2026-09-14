@@ -2,11 +2,13 @@ import { chat, upsertIncomingMessage } from "@trigger.dev/sdk/ai"
 import { logger } from "@trigger.dev/sdk"
 import { google } from "@ai-sdk/google"
 import { eq } from "drizzle-orm"
-import { streamText } from "ai"
+import { streamText, stepCountIs } from "ai"
 
 import { db } from "@/lib/db"
 import { games } from "@/lib/db/schema"
 import { createGameSandbox } from "@/lib/daytona/utils"
+import { gameInstructions } from "@/lib/games/instructions"
+import { buildGameTools } from "@/lib/games/tools"
 
 export const gameChat = chat.agent({
   id: "game-chat",
@@ -18,6 +20,12 @@ export const gameChat = chat.agent({
   // when messages arrive in rapid succession (e.g. tool-approval flows or
   // high-frequency bots).
   idleTimeoutInSeconds: 0,
+
+  // Per-turn tool resolution: chatId is required to resolve the correct
+  // sandbox, and it is only available at turn time via ResolveToolsEvent.
+  // Declaring tools here (not just on streamText) ensures each tool's
+  // toModelOutput is re-applied when prior-turn history is re-converted.
+  tools: ({ chatId }) => buildGameTools(chatId),
 
   // ------------------------------------------------------------------
   // Persistence: DB is the source of truth.
@@ -71,17 +79,20 @@ export const gameChat = chat.agent({
   },
 
   // ------------------------------------------------------------------
-  // Per-turn run: identical to the old route handler's streamText call.
-  // - messages arrive pre-converted (no convertToModelMessages needed)
-  // - signal forwarded so Stop aborts the model server-side
-  // - ...chat.toStreamTextOptions() MUST be spread first so compaction,
-  //   mid-turn steering, background injection, and telemetry are wired
+  // Per-turn run.
+  // - tools read back typed from the payload (same set declared above)
+  // - ...chat.toStreamTextOptions({ tools }) MUST be spread first so
+  //   compaction, mid-turn steering, background injection, and telemetry
+  //   are wired, and so the tool set survives cross-turn history replay
+  // - stopWhen caps the agentic loop at 10 steps per turn
   // ------------------------------------------------------------------
-  run: async ({ messages, signal }) =>
+  run: async ({ messages, tools, signal }) =>
     streamText({
-      ...chat.toStreamTextOptions(),
+      ...chat.toStreamTextOptions({ tools }),
       model: google("gemini-3.5-flash-lite"),
+      system: gameInstructions.join("\n\n"),
       messages,
       abortSignal: signal,
+      stopWhen: stepCountIs(10),
     }),
 })
