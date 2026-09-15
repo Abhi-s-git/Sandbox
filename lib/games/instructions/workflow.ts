@@ -75,4 +75,26 @@ Use this to remove a file that is no longer needed.
 - Handle both keyboard and touch/pointer input when it makes sense for the game.
 - Do not include placeholder comments like "// add game logic here"; write real
   code or leave the section out.
+- **Every \`index.html\` must include this importmap in \`<head>\` before any
+  \`<script type="module">\` tag** — no exceptions, even if you don't use Three.js
+  directly:
+  \`\`\`html
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+  \`\`\`
+  The game runs as a browser ES module with no bundler. Without this importmap,
+  bare specifiers like \`import ... from 'three'\` throw
+  \`"Failed to resolve module specifier 'three'"\` and the game fails to load.
+  The importmap makes both bare-specifier imports **and** full CDN URL imports work,
+  so always include it.
+- In your own import statements, always use either the runtime relative path
+  (\`./runtime/engine.js\`) or the full CDN URL
+  (\`https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js\`).
+  The importmap is a safety net, not a licence to use bare specifiers carelessly.
 `.trim()

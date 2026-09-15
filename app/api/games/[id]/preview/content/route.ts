@@ -99,7 +99,12 @@ export async function GET(
     return notReadyHtml("Game server is starting up…")
   }
 
-  const preview = await sandbox.getPreviewLink(GAME_SERVER_PORT)
+  let preview: Awaited<ReturnType<typeof sandbox.getPreviewLink>>
+  try {
+    preview = await sandbox.getPreviewLink(GAME_SERVER_PORT)
+  } catch {
+    return notReadyHtml("Game server is starting up…")
+  }
 
   let upstream: Response
   try {

@@ -69,15 +69,27 @@ import { createEngine, addAmbientLight, createBox, createHUD,
 \`\`\`
 
 ### Three.js CDN
-All runtime modules import Three.js from the jsDelivr CDN at r176:
+All runtime modules import Three.js from the jsDelivr CDN at r180:
 \`\`\`js
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 \`\`\`
-Use the same URL in the game code to avoid duplicate module instances.
+Use the **exact same URL** in the game code to avoid duplicate module instances.
+
+**IMPORTANT — no bare specifiers.**
+The game runs as a browser ES module with no bundler. Bare specifiers like
+\`import * as THREE from 'three'\` are NOT valid in the browser and will throw
+\`"Failed to resolve module specifier 'three'"\`. Always use the full CDN URL above.
 
 ---
 
 ## Minimal game skeleton
+
+Every generated \`index.html\` **MUST** include the importmap below in \`<head>\`.
+The importmap maps the bare specifier \`"three"\` and the \`three/addons/\` prefix to
+the jsDelivr CDN so that \`import ... from 'three'\` works in the browser without
+a bundler. This is belt-and-suspenders: use the full CDN URL in your own imports
+**and** keep the importmap so any third-party snippet or library that uses bare
+specifiers also resolves correctly.
 
 \`\`\`html
 <!DOCTYPE html>
@@ -86,6 +98,14 @@ Use the same URL in the game code to avoid duplicate module instances.
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>My Game</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #0a0a0a; overflow: hidden; }

@@ -63,7 +63,12 @@ export async function GET(
     return new NextResponse(null, { status: 503 })
   }
 
-  const preview = await sandbox.getPreviewLink(GAME_SERVER_PORT)
+  let preview: Awaited<ReturnType<typeof sandbox.getPreviewLink>>
+  try {
+    preview = await sandbox.getPreviewLink(GAME_SERVER_PORT)
+  } catch {
+    return new NextResponse(null, { status: 503 })
+  }
 
   // Build the full upstream URL by appending the catch-all path segments to
   // the Daytona preview base URL. The base URL may or may not have a trailing
