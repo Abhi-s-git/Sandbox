@@ -342,6 +342,88 @@ export const delete_file = (chatId: string) =>
     },
   })
 
+// ─── Human-in-the-loop tool ───────────────────────────────────────────────────
+
+/**
+ * Dimensions of game design the agent can ask the player about.
+ * The model MUST select a dimension before generating the question and choices
+ * so it explicitly identifies the aspect of the game it is asking about.
+ */
+const AskPlayerDimension = z.enum([
+  "loop",        // Core gameplay loop
+  "goal",        // Win/lose conditions and objectives
+  "world",       // Setting and environment
+  "look",        // Visual style and art direction
+  "feel",        // Tone, mood, and atmosphere
+  "mechanics",   // Specific systems and rules
+  "player",      // Player character and abilities
+  "enemies",     // Antagonists and obstacles
+  "progression", // Levelling, upgrades, and unlocks
+  "difficulty",  // Challenge and balance
+  "controls",    // Input and interaction scheme
+  "setting",     // Time period, location, lore
+  "story",       // Narrative and characters
+  "rewards",     // Incentives and feedback
+  "other",       // Anything else
+])
+
+/**
+ * A single choice presented to the player.
+ */
+const AskPlayerOption = z.object({
+  id: z.string().describe("Unique identifier for this option, e.g. 'top-down'"),
+  label: z.string().describe("Short display label, e.g. 'Top-down view'"),
+  description: z
+    .string()
+    .describe("One-sentence explanation of what this option means for the game"),
+})
+
+/**
+ * ask_player — Human-in-the-loop tool.
+ *
+ * Pauses the agent turn and surfaces a multiple-choice question to the player.
+ * The player answers through the existing chat UI via addToolOutput(); the agent
+ * resumes on the next turn with their selection.
+ *
+ * No execute function: streamText hands control back to the frontend once the
+ * model calls this tool. The frontend supplies the answer via addToolOutput()
+ * with sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls.
+ *
+ * outputSchema defines the shape the frontend sends back; it is required for
+ * HITL tools so the agent turn can be correctly resumed with a typed result.
+ */
+export const ask_player = tool({
+  description:
+    "Ask the player a clarifying question about a specific aspect of their game " +
+    "before building or making a significant design decision. " +
+    "Select the most relevant dimension first, then write a concise question " +
+    "and 2–4 concrete options the player can choose from. " +
+    "Use this when the player's intent is genuinely ambiguous — not on every turn.",
+  inputSchema: z.object({
+    dimension: AskPlayerDimension.describe(
+      "The game-design dimension this question is about. " +
+        "Select this first to identify what aspect you are asking about.",
+    ),
+    question: z
+      .string()
+      .describe(
+        "The question to present to the player. Keep it short and specific.",
+      ),
+    options: z
+      .array(AskPlayerOption)
+      .min(2)
+      .max(4)
+      .describe("2–4 choices for the player to pick from."),
+  }),
+  outputSchema: z.object({
+    id: z.string().describe("The id of the option the player selected"),
+    label: z.string().describe("The label of the option the player selected"),
+  }),
+  // No execute — this is a human-in-the-loop tool.
+  // streamText ends with the tool call pending; the frontend collects the
+  // answer and fires the next turn via addToolOutput + sendAutomaticallyWhen.
+})
+
 /**
  * Builds the full game tool set for a given chat session.
  * Each tool captures `chatId` in its closure to resolve the correct sandbox.
@@ -353,6 +435,7 @@ export function buildGameTools(chatId: string) {
     read_file: read_file(chatId),
     list_files: list_files(chatId),
     delete_file: delete_file(chatId),
+    ask_player,
   }
 }
 
