@@ -172,6 +172,15 @@ export async function startGameServer(
 /** Absolute local path to the runtime seed folder, relative to project root. */
 const RUNTIME_DIR = path.join(process.cwd(), "lib/games/runtime")
 
+/**
+ * The local directory used as the base for computing remote paths.
+ * By rooting at the parent of RUNTIME_DIR (lib/games/), relative paths
+ * include the "runtime/" prefix, so they land at:
+ *   /home/daytona/game/runtime/<file>
+ * instead of /home/daytona/game/<file>.
+ */
+const RUNTIME_SEED_BASE = path.dirname(RUNTIME_DIR)
+
 /** Absolute path to the game directory inside every Daytona sandbox. */
 const SANDBOX_GAME_DIR = "/home/daytona/game"
 
@@ -206,10 +215,10 @@ function collectFiles(dir: string): string[] {
  * walking lib/games/runtime/** using Node's `fs` module, then uploading each
  * file to the sandbox via `executeCommand` (printf + shell redirection).
  *
- * Files are written with the same relative path structure as the runtime
- * folder. For example:
- *   lib/games/runtime/index.html → /home/daytona/game/index.html
- *   lib/games/runtime/assets/bg.png → /home/daytona/game/assets/bg.png
+ * Files are written preserving the "runtime/" prefix so the generated game's
+ * import paths resolve correctly. For example:
+ *   lib/games/runtime/engine.js  → /home/daytona/game/runtime/engine.js
+ *   lib/games/runtime/ui.js      → /home/daytona/game/runtime/ui.js
  *
  * We use printf + shell redirection rather than fs.uploadFile because
  * uploadFile relies on a dynamic require('form-data') that is not available
@@ -266,12 +275,15 @@ export async function createGameSandbox(gameId: string): Promise<{ sandbox: Sand
       sandboxId: sandbox.id,
       fileCount: localFiles.length,
       runtimeDir: RUNTIME_DIR,
+      seedBase: RUNTIME_SEED_BASE,
     })
 
     for (const localPath of localFiles) {
-      // Compute the relative path from the runtime folder root, then build
-      // the absolute destination path inside the sandbox.
-      const relative = path.relative(RUNTIME_DIR, localPath)
+      // Compute the relative path from lib/games/ (not from lib/games/runtime/)
+      // so the "runtime/" directory segment is preserved in the remote path.
+      // Example: lib/games/runtime/engine.js → runtime/engine.js
+      //          → /home/daytona/game/runtime/engine.js
+      const relative = path.relative(RUNTIME_SEED_BASE, localPath)
       const remotePath = path.posix.join(
         SANDBOX_GAME_DIR,
         // Convert Windows backslashes to forward slashes for the remote path.

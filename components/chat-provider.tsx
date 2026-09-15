@@ -33,6 +33,11 @@ type ChatContextValue = {
    * the preview iframe) exactly once after each completed turn.
    */
   revision: number
+  /**
+   * Submits a tool output for a pending human-in-the-loop tool call.
+   * Used by the ask_player UI to return the player's selection to the agent.
+   */
+  addToolOutput: ReturnType<typeof useChat>["addToolOutput"]
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -64,7 +69,7 @@ function ChatProvider({
       startGameChatSession({ chatId, clientData }),
   })
 
-  const { messages, status, sendMessage, stop: aiStop } = useChat({
+  const { messages, status, sendMessage, stop: aiStop, addToolOutput } = useChat({
     id: gameId,
     messages: initialMessages,
     transport,
@@ -113,7 +118,7 @@ function ChatProvider({
   }, [initialPrompt, sendMessage])
 
   return (
-    <ChatContext.Provider value={{ gameId, messages, status, sendMessage, stop, revision }}>
+    <ChatContext.Provider value={{ gameId, messages, status, sendMessage, stop, revision, addToolOutput }}>
       {children}
     </ChatContext.Provider>
   )

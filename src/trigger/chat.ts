@@ -2,7 +2,7 @@ import { chat, upsertIncomingMessage } from "@trigger.dev/sdk/ai"
 import { logger } from "@trigger.dev/sdk"
 import { google } from "@ai-sdk/google"
 import { eq } from "drizzle-orm"
-import { streamText, stepCountIs } from "ai"
+import { stepCountIs } from "ai"
 
 import { db } from "@/lib/db"
 import { games } from "@/lib/db/schema"
@@ -86,7 +86,7 @@ export const gameChat = chat.agent({
   //   are wired, and so the tool set survives cross-turn history replay
   // - stopWhen caps the agentic loop at 10 steps per turn
   // ------------------------------------------------------------------
-  run: async ({ messages, tools, signal }) =>
+  run: async ({ messages, tools, signal, streamText }) =>
     streamText({
       ...chat.toStreamTextOptions({ tools }),
       model: google("gemini-3.5-flash-lite"),

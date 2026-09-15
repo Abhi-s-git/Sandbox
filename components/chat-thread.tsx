@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Image from "next/image"
 import { Check, Circle, X } from "lucide-react"
 
@@ -15,6 +16,8 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller"
+import type { UseChatHelpers } from "@ai-sdk/react"
+import type { UIMessage } from "ai"
 
 // ── Tool-call states from AI SDK v7 UIToolInvocation ─────────────────────────
 type ToolState =
@@ -38,7 +41,111 @@ interface ToolPart {
   toolName: string
   state: ToolState
   input?: ToolInput
+  output?: unknown
   errorText?: string
+}
+
+// ── ask_player types ──────────────────────────────────────────────────────────
+
+interface AskPlayerOption {
+  id: string
+  label: string
+  description: string
+}
+
+interface AskPlayerInput {
+  question: string
+  options: AskPlayerOption[]
+  dimension?: string
+}
+
+interface AskPlayerOutput {
+  id: string
+  label: string
+}
+
+// ── AskPlayerCard ─────────────────────────────────────────────────────────────
+
+/**
+ * Interactive choice card for the ask_player human-in-the-loop tool.
+ *
+ * - While pending (input-available, input-streaming): renders clickable options.
+ * - After submission (output-available): shows a read-only view with the
+ *   selected option highlighted.
+ */
+function AskPlayerCard({
+  part,
+  addToolOutput,
+}: {
+  part: ToolPart
+  addToolOutput: UseChatHelpers<UIMessage>["addToolOutput"]
+}) {
+  const [submitted, setSubmitted] = useState<string | null>(null)
+
+  const input = part.input as AskPlayerInput | undefined
+  if (!input?.question || !Array.isArray(input.options)) return null
+
+  // Derive already-answered state from either local submission or SDK output.
+  const answeredId: string | null =
+    submitted ??
+    (part.state === "output-available" && part.output
+      ? (part.output as AskPlayerOutput).id
+      : null)
+
+  const isDisabled = answeredId !== null
+
+  function handleSelect(option: AskPlayerOption) {
+    if (isDisabled) return
+    setSubmitted(option.id)
+    void addToolOutput({
+      tool: "ask_player",
+      toolCallId: part.toolCallId,
+      output: { id: option.id, label: option.label },
+    })
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-border bg-muted/40 p-4">
+      <p className="mb-3 text-sm font-medium text-foreground">{input.question}</p>
+      <div className="flex flex-col gap-2">
+        {input.options.map((option) => {
+          const isSelected = answeredId === option.id
+          return (
+            <button
+              key={option.id}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => handleSelect(option)}
+              className={[
+                "flex flex-col items-start rounded-lg border px-4 py-3 text-left transition-colors",
+                isDisabled
+                  ? isSelected
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "cursor-default border-border bg-transparent text-muted-foreground opacity-50"
+                  : "cursor-pointer border-border bg-background hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <span className="flex w-full items-center gap-2 text-sm font-medium">
+                {isSelected ? (
+                  <Check className="size-4 shrink-0 text-primary" />
+                ) : (
+                  <Circle className="size-4 shrink-0 opacity-30" />
+                )}
+                {option.label}
+              </span>
+              {option.description ? (
+                <span className="mt-0.5 pl-6 text-xs text-muted-foreground">
+                  {option.description}
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 // ── Label helpers ─────────────────────────────────────────────────────────────
@@ -164,7 +271,7 @@ function ToolCallMarker({ part }: { part: ToolPart }) {
 }
 
 function ChatThread() {
-  const { messages, status, sendMessage, stop } = useChatContext()
+  const { messages, status, sendMessage, stop, addToolOutput } = useChatContext()
 
   // Disable text input and the submit action while a request is in-flight,
   // but keep the composer mounted so the stop button remains accessible.
@@ -202,6 +309,14 @@ function ChatThread() {
                       ) as unknown as ToolPart[])
                     : []
 
+                // Separate ask_player parts from regular file-operation markers
+                const askPlayerParts = toolParts.filter(
+                  (p) => p.toolName === "ask_player",
+                )
+                const fileToolParts = toolParts.filter(
+                  (p) => p.toolName !== "ask_player",
+                )
+
                 // Collect text parts
                 const textParts = message.parts.filter(
                   (p) => p.type === "text",
@@ -225,10 +340,10 @@ function ChatThread() {
                         </MessageAvatar>
                       ) : null}
                       <MessageContent>
-                        {/* Tool call markers — shown for assistant messages only */}
-                        {toolParts.length > 0 ? (
+                        {/* Tool call markers — file operations only */}
+                        {fileToolParts.length > 0 ? (
                           <div className="mb-1 flex flex-col gap-0.5">
-                            {toolParts.map((part) => (
+                            {fileToolParts.map((part) => (
                               <ToolCallMarker
                                 key={part.toolCallId}
                                 part={part}
@@ -262,6 +377,15 @@ function ChatThread() {
                             </Bubble>
                           </BubbleGroup>
                         ) : null}
+
+                        {/* ask_player choice cards */}
+                        {askPlayerParts.map((part) => (
+                          <AskPlayerCard
+                            key={part.toolCallId}
+                            part={part}
+                            addToolOutput={addToolOutput}
+                          />
+                        ))}
                       </MessageContent>
                     </Message>
                   </MessageScrollerItem>
