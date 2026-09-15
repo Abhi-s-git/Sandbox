@@ -1,5 +1,6 @@
 import { workflowInstructions } from "./workflow"
 import { runtimeInstructions } from "./runtime"
+import { primitivesInstructions } from "./primitives"
 
 /**
  * Combined system prompt instructions for the game-chat agent.
@@ -8,4 +9,5 @@ import { runtimeInstructions } from "./runtime"
 export const gameInstructions: string[] = [
   workflowInstructions,
   runtimeInstructions,
+  primitivesInstructions,
 ]

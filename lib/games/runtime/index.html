@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Game Runtime</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #0a0a0a;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* HUD overlay ─────────────────────────────────────────────────── */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #badge {
+      position: absolute;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      animation: fadeUp 1s 0.8s ease forwards;
+    }
+
+    #badge-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #ffffff;
+      text-shadow: 0 1px 12px rgba(234,88,12,0.6);
+    }
+
+    #badge-sub {
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+    }
+
+    #badge-bar {
+      width: 48px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #ea580c, transparent);
+      border-radius: 1px;
+      margin-bottom: 4px;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* Vignette */
+    #vignette {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%);
+      pointer-events: none;
+      z-index: 5;
+    }
+  </style>
+</head>
+<body>
+
+<div id="vignette"></div>
+<div id="hud">
+  <div id="badge">
+    <div id="badge-bar"></div>
+    <div id="badge-title">Game Runtime</div>
+    <div id="badge-sub">Powered by Three.js</div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js';
+
+// ── Palette (from logo.svg) ─────────────────────────────────────────
+const ORANGE      = new THREE.Color(0xea580c);
+const ORANGE_DARK = new THREE.Color(0xc2410c);
+const WHITE_80    = new THREE.Color(0xffffff).multiplyScalar(0.82);
+const WHITE_50    = new THREE.Color(0xffffff).multiplyScalar(0.52);
+const BG          = new THREE.Color(0x0a0a0a);
+
+// ── Renderer ────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// ── Scene & camera ──────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = BG;
+scene.fog = new THREE.FogExp2(BG, 0.018);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 1.5, 7);
+camera.lookAt(0, 0, 0);
+
+// ── Lights ──────────────────────────────────────────────────────────
+// Ambient fill
+const ambient = new THREE.AmbientLight(0x1a0a00, 1.5);
+scene.add(ambient);
+
+// Key light — warm orange (matches logo)
+const keyLight = new THREE.DirectionalLight(ORANGE, 3.0);
+keyLight.position.set(4, 6, 5);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.near = 0.5;
+keyLight.shadow.camera.far = 30;
+keyLight.shadow.bias = -0.001;
+scene.add(keyLight);
+
+// Fill light — cool blue-white (contrast)
+const fillLight = new THREE.DirectionalLight(0x6688cc, 0.8);
+fillLight.position.set(-5, 3, -3);
+scene.add(fillLight);
+
+// Rim / back light — subtle white-orange
+const rimLight = new THREE.DirectionalLight(0xffddbb, 0.5);
+rimLight.position.set(0, -3, -6);
+scene.add(rimLight);
+
+// ── Main rotating cube group ────────────────────────────────────────
+const cubeGroup = new THREE.Group();
+scene.add(cubeGroup);
+
+// Outer cube — rounded-edge look via BoxGeometry with slight scale
+const outerGeo = new THREE.BoxGeometry(2, 2, 2, 2, 2, 2);
+
+// Multi-face material: each face pair (±X, ±Y, ±Z) gets a distinct shade
+// mimicking the logo's three-face diamond/cube look
+const faceMaterials = [
+  // +X  (right face — bright white)
+  new THREE.MeshStandardMaterial({ color: WHITE_80, roughness: 0.15, metalness: 0.1 }),
+  // -X  (left face — medium)
+  new THREE.MeshStandardMaterial({ color: WHITE_50, roughness: 0.3, metalness: 0.05 }),
+  // +Y  (top face — orange highlight)
+  new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.2, metalness: 0.2, emissive: ORANGE_DARK, emissiveIntensity: 0.3 }),
+  // -Y  (bottom face)
+  new THREE.MeshStandardMaterial({ color: ORANGE_DARK, roughness: 0.5, metalness: 0.1 }),
+  // +Z  (front face — white)
+  new THREE.MeshStandardMaterial({ color: WHITE_80, roughness: 0.15, metalness: 0.1 }),
+  // -Z  (back face)
+  new THREE.MeshStandardMaterial({ color: WHITE_50, roughness: 0.3, metalness: 0.05 }),
+];
+
+const cube = new THREE.Mesh(outerGeo, faceMaterials);
+cube.castShadow = true;
+cube.receiveShadow = true;
+cubeGroup.add(cube);
+
+// ── Inner glowing cube (smaller, additive blend) ────────────────────
+const innerGeo = new THREE.BoxGeometry(1.7, 1.7, 1.7);
+const innerMat = new THREE.MeshStandardMaterial({
+  color: ORANGE,
+  emissive: ORANGE,
+  emissiveIntensity: 0.15,
+  roughness: 1,
+  transparent: true,
+  opacity: 0,  // invisible — only contributes glow
+});
+const innerCube = new THREE.Mesh(innerGeo, innerMat);
+cubeGroup.add(innerCube);
+
+// ── Wireframe overlay ───────────────────────────────────────────────
+const wireGeo = new THREE.BoxGeometry(2.02, 2.02, 2.02);
+const wireMat = new THREE.MeshBasicMaterial({
+  color: new THREE.Color(ORANGE).multiplyScalar(0.5),
+  wireframe: true,
+  transparent: true,
+  opacity: 0.18,
+});
+const wireframe = new THREE.Mesh(wireGeo, wireMat);
+cubeGroup.add(wireframe);
+
+// ── Orbiting mini cubes ─────────────────────────────────────────────
+const ORBIT_COUNT = 8;
+const orbitGroup = new THREE.Group();
+scene.add(orbitGroup);
+
+const miniMat = new THREE.MeshStandardMaterial({
+  color: ORANGE,
+  emissive: ORANGE_DARK,
+  emissiveIntensity: 0.4,
+  roughness: 0.3,
+  metalness: 0.2,
+});
+
+const miniCubes = [];
+for (let i = 0; i < ORBIT_COUNT; i++) {
+  const size = 0.08 + Math.random() * 0.12;
+  const geo = new THREE.BoxGeometry(size, size, size);
+  const mesh = new THREE.Mesh(geo, miniMat.clone());
+  mesh.castShadow = false;
+
+  const angle = (i / ORBIT_COUNT) * Math.PI * 2;
+  const radius = 1.8 + Math.random() * 0.6;
+  const yOffset = (Math.random() - 0.5) * 1.4;
+  mesh.userData = { angle, radius, yOffset, speed: 0.3 + Math.random() * 0.4 };
+  orbitGroup.add(mesh);
+  miniCubes.push(mesh);
+}
+
+// ── Ground reflection plane ─────────────────────────────────────────
+const groundGeo = new THREE.PlaneGeometry(30, 30);
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x0d0d0d,
+  roughness: 0.5,
+  metalness: 0.3,
+  transparent: true,
+  opacity: 0.6,
+});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -2.2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Soft shadow blob under cube
+const shadowGeo = new THREE.CircleGeometry(1.2, 32);
+const shadowMat = new THREE.MeshBasicMaterial({
+  color: 0x000000,
+  transparent: true,
+  opacity: 0.35,
+  depthWrite: false,
+});
+const shadowBlob = new THREE.Mesh(shadowGeo, shadowMat);
+shadowBlob.rotation.x = -Math.PI / 2;
+shadowBlob.position.y = -2.19;
+scene.add(shadowBlob);
+
+// ── Floating particles ──────────────────────────────────────────────
+const PARTICLE_COUNT = 180;
+const particlePositions = new Float32Array(PARTICLE_COUNT * 3);
+const particleSpeeds = new Float32Array(PARTICLE_COUNT);
+const particlePhases = new Float32Array(PARTICLE_COUNT);
+
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  particlePositions[i * 3]     = (Math.random() - 0.5) * 12;
+  particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 8;
+  particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 12 - 2;
+  particleSpeeds[i] = 0.2 + Math.random() * 0.5;
+  particlePhases[i] = Math.random() * Math.PI * 2;
+}
+
+const particleGeo = new THREE.BufferGeometry();
+particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+
+const particleMat = new THREE.PointsMaterial({
+  color: ORANGE,
+  size: 0.04,
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 0.45,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// ── Clock ───────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+// ── Camera orbit path ───────────────────────────────────────────────
+const CAM_RADIUS = 7.0;
+const CAM_HEIGHT = 1.5;
+const CAM_ORBIT_SPEED = 0.08; // rad/s
+
+// ── Animation loop ──────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+
+  const delta = clock.getDelta();
+  const elapsed = clock.getElapsedTime();
+
+  // Slowly orbit camera around scene
+  const camAngle = elapsed * CAM_ORBIT_SPEED;
+  camera.position.x = Math.sin(camAngle) * CAM_RADIUS;
+  camera.position.z = Math.cos(camAngle) * CAM_RADIUS;
+  camera.position.y = CAM_HEIGHT + Math.sin(elapsed * 0.25) * 0.3;
+  camera.lookAt(0, -0.2, 0);
+
+  // Rotate main cube — slow, graceful tumble
+  cubeGroup.rotation.y += delta * 0.4;
+  cubeGroup.rotation.x = Math.sin(elapsed * 0.3) * 0.25;
+  cubeGroup.rotation.z = Math.cos(elapsed * 0.2) * 0.12;
+
+  // Gentle float
+  cubeGroup.position.y = Math.sin(elapsed * 0.6) * 0.12;
+
+  // Orbiting mini cubes
+  for (const mini of miniCubes) {
+    const { angle, radius, yOffset, speed } = mini.userData;
+    const a = angle + elapsed * speed;
+    mini.position.x = Math.cos(a) * radius;
+    mini.position.y = yOffset + Math.sin(elapsed * 0.8 + angle) * 0.2;
+    mini.position.z = Math.sin(a) * radius;
+    mini.rotation.x += delta * 1.2;
+    mini.rotation.y += delta * 0.8;
+  }
+
+  // Particle drift upward and wrap
+  const posAttr = particleGeo.attributes.position;
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    posAttr.array[i * 3 + 1] += particleSpeeds[i] * delta;
+    if (posAttr.array[i * 3 + 1] > 4) {
+      posAttr.array[i * 3 + 1] = -4;
+    }
+    // Subtle sway
+    posAttr.array[i * 3] += Math.sin(elapsed * 0.4 + particlePhases[i]) * 0.003;
+  }
+  posAttr.needsUpdate = true;
+
+  // Pulse wireframe opacity
+  wireMat.opacity = 0.12 + Math.sin(elapsed * 1.2) * 0.06;
+
+  // Shadow blob scale matches cube float
+  const shadowScale = 1 + Math.sin(elapsed * 0.6) * -0.05;
+  shadowBlob.scale.set(shadowScale, shadowScale, shadowScale);
+
+  // Key light subtle pulse
+  keyLight.intensity = 2.8 + Math.sin(elapsed * 0.7) * 0.4;
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// ── Resize handler ──────────────────────────────────────────────────
+function onResize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+}
+window.addEventListener('resize', onResize);
+</script>
+</body>
+</html>

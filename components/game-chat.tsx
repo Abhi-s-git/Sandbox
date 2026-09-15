@@ -25,7 +25,8 @@ function GameChat({ gameId, sandboxId }: GameChatProps) {
   // watch for the first completed turn. That is when Trigger.dev will have
   // saved the sandboxId to the DB. Calling router.refresh() re-runs the
   // Server Component so page.tsx re-fetches getGame() and passes the new
-  // sandboxId down — making the preview panel appear without a manual reload.
+  // sandboxId down — making the preview transition to the real game without
+  // a manual reload.
   useEffect(() => {
     if (sandboxId === null && revision > prevRevision.current) {
       router.refresh()
@@ -33,14 +34,9 @@ function GameChat({ gameId, sandboxId }: GameChatProps) {
     prevRevision.current = revision
   }, [revision, sandboxId, router])
 
-  if (!sandboxId) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <ChatThread />
-      </div>
-    )
-  }
-
+  // Always render the split layout. ChatPreview handles the sandboxId=null
+  // state itself by showing a "New game" placeholder instead of loading
+  // the Daytona preview. This ensures the Preview panel is always visible.
   return (
     <ResizablePanelGroup
       orientation="horizontal"
@@ -51,7 +47,7 @@ function GameChat({ gameId, sandboxId }: GameChatProps) {
       </ResizablePanel>
       <ResizableHandle withHandle />
       <ResizablePanel defaultSize={30}>
-        <ChatPreview gameId={gameId} revision={revision} />
+        <ChatPreview gameId={gameId} sandboxId={sandboxId} revision={revision} />
       </ResizablePanel>
     </ResizablePanelGroup>
   )

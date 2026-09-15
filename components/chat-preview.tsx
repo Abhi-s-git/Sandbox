@@ -5,6 +5,11 @@ import { useEffect, useState } from "react"
 interface ChatPreviewProps {
   gameId: string
   /**
+   * The Daytona sandbox ID for this game. When null the sandbox has not been
+   * created yet — we show a placeholder instead of calling the preview API.
+   */
+  sandboxId: string | null
+  /**
    * Incremented by ChatProvider each time a streaming turn completes.
    * Used as the iframe key so the browser reloads the preview after every
    * turn without fetching a new proxy URL from the API.
@@ -12,14 +17,21 @@ interface ChatPreviewProps {
   revision?: number
 }
 
-export function ChatPreview({ gameId, revision = 0 }: ChatPreviewProps) {
+export function ChatPreview({ gameId, sandboxId, revision = 0 }: ChatPreviewProps) {
   const [proxyUrl, setProxyUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch the proxy URL once per gameId. The URL itself never changes —
-  // only the iframe content changes after each turn, so we reload the
-  // iframe via the `key` prop rather than re-fetching the URL.
+  // Fetch the proxy URL whenever the sandboxId becomes available. If there is
+  // no sandbox yet we skip the fetch entirely and render the placeholder below.
   useEffect(() => {
+    if (!sandboxId) {
+      // Reset any stale URL/error from a previous state so we don't briefly
+      // flash old content when the component re-renders with sandboxId=null.
+      setProxyUrl(null)
+      setError(null)
+      return
+    }
+
     let cancelled = false
 
     async function fetchPreview() {
@@ -44,14 +56,40 @@ export function ChatPreview({ gameId, revision = 0 }: ChatPreviewProps) {
     return () => {
       cancelled = true
     }
-  }, [gameId])
+  }, [gameId, sandboxId])
+
+  // No sandbox yet — show a neutral placeholder so the Preview panel is
+  // always visible even for brand-new games.
+  if (!sandboxId) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-muted/30">
+        <div className="text-center">
+          <p className="text-sm font-medium text-muted-foreground">New game</p>
+          <p className="mt-1 text-xs text-muted-foreground/60">
+            Nothing has been built yet
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (error) {
-    return <p className="p-4 text-sm text-destructive">{error}</p>
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-muted/30">
+        <div className="text-center">
+          <p className="text-sm font-medium text-muted-foreground">Preview unavailable</p>
+          <p className="mt-1 text-xs text-muted-foreground/60">{error}</p>
+        </div>
+      </div>
+    )
   }
 
   if (!proxyUrl) {
-    return <p className="p-4 text-sm text-muted-foreground">Loading preview…</p>
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-muted/30">
+        <p className="text-sm text-muted-foreground">Loading preview…</p>
+      </div>
+    )
   }
 
   return (

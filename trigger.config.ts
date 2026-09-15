@@ -1,4 +1,5 @@
 import { defineConfig } from "@trigger.dev/sdk";
+import { additionalFiles } from "@trigger.dev/build/extensions/core";
 
 export default defineConfig({
   project: "proj_atyhqumbfljgipzhrsvw",
@@ -10,6 +11,9 @@ export default defineConfig({
   // so this cap only bounds the time spent inside a single turn's streamText
   // call, not the entire conversation lifetime.
   maxDuration: 3600,
+  // Set to false so process.cwd() points to the build/project root at
+  // runtime, which is required for additionalFiles paths to resolve correctly.
+  legacyDevProcessCwdBehaviour: false,
   retries: {
     enabledInDev: true,
     default: {
@@ -21,4 +25,9 @@ export default defineConfig({
     },
   },
   dirs: ["./src/trigger"],
+  build: {
+    extensions: [
+      additionalFiles({ files: ["./lib/games/runtime/**"] }),
+    ],
+  },
 });

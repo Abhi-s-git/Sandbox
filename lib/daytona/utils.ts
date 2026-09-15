@@ -1,6 +1,8 @@
 import { type Sandbox } from "@daytona/sdk"
 import { logger } from "@trigger.dev/sdk"
 import { eq } from "drizzle-orm"
+import fs from "node:fs"
+import path from "node:path"
 
 import { db } from "@/lib/db"
 import { games } from "@/lib/db/schema"
@@ -167,25 +169,53 @@ export async function startGameServer(
   )
 }
 
-const INITIAL_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>New Game</title></head>
-<body>
-  <h1>New game</h1>
-</body>
-</html>
-`
+/** Absolute local path to the runtime seed folder, relative to project root. */
+const RUNTIME_DIR = path.join(process.cwd(), "lib/games/runtime")
+
+/** Absolute path to the game directory inside every Daytona sandbox. */
+const SANDBOX_GAME_DIR = "/home/daytona/game"
+
+/**
+ * Escapes a string for safe embedding inside a POSIX single-quoted shell
+ * argument: single quotes are ended, escaped, and re-opened.
+ */
+function shellEscapeForSeed(value: string): string {
+  return value.replace(/'/g, "'\\''")
+}
+
+/**
+ * Recursively collects all files under `dir`, returning their absolute local
+ * paths. Directories are not included — only leaf files.
+ */
+function collectFiles(dir: string): string[] {
+  const results: string[] = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      results.push(...collectFiles(full))
+    } else if (entry.isFile()) {
+      results.push(full)
+    }
+  }
+  return results
+}
 
 /**
  * Creates a Daytona sandbox for the given game (idempotent — no-op if the
- * game already has a sandboxId). Seeds /home/daytona/game/index.html with a
- * blank game shell, then persists the sandbox ID back to the database.
+ * game already has a sandboxId). Seeds /home/daytona/game/ by recursively
+ * walking lib/games/runtime/** using Node's `fs` module, then uploading each
+ * file to the sandbox via `executeCommand` (printf + shell redirection).
  *
- * index.html is written via executeCommand (printf) rather than fs.uploadFile.
- * uploadFile relies on a dynamic require('form-data') that fails inside the
- * bundled ESM worker because require() is not defined at runtime.
+ * Files are written with the same relative path structure as the runtime
+ * folder. For example:
+ *   lib/games/runtime/index.html → /home/daytona/game/index.html
+ *   lib/games/runtime/assets/bg.png → /home/daytona/game/assets/bg.png
  *
- * @returns The sandbox ID (new or pre-existing).
+ * We use printf + shell redirection rather than fs.uploadFile because
+ * uploadFile relies on a dynamic require('form-data') that is not available
+ * inside the bundled ESM worker at runtime.
+ *
+ * @returns The started Sandbox instance.
  */
 export async function createGameSandbox(gameId: string): Promise<{ sandbox: Sandbox }> {
   logger.log("CREATE GAME SANDBOX ENTERED", { gameId })
@@ -226,25 +256,55 @@ export async function createGameSandbox(gameId: string): Promise<{ sandbox: Sand
 
     logger.info("createGameSandbox: sandbox created", { gameId, sandboxId: sandbox.id })
 
-    // ── seed index.html via shell command ────────────────────────────────────
-    // We use printf + shell redirection instead of fs.uploadFile because
-    // uploadFile requires form-data (a CJS module loaded via require()), which
-    // is not available inside the bundled ESM worker at runtime.
-    const escaped = INITIAL_HTML
-      .replace(/\\/g, "\\\\")
-      .replace(/'/g, "'\\''")
+    // ── seed all files from lib/games/runtime/** ─────────────────────────────
+    // Collect every file in the local runtime directory, then upload each to
+    // the sandbox preserving the relative directory structure.
+    const localFiles = collectFiles(RUNTIME_DIR)
 
-    const writeResult = await sandbox.process.executeCommand(
-      `mkdir -p /home/daytona/game && printf '%s' '${escaped}' > /home/daytona/game/index.html`,
-    )
+    logger.info("createGameSandbox: seeding runtime files", {
+      gameId,
+      sandboxId: sandbox.id,
+      fileCount: localFiles.length,
+      runtimeDir: RUNTIME_DIR,
+    })
 
-    if (writeResult.exitCode !== 0) {
-      throw new Error(
-        `Failed to seed index.html (exit ${writeResult.exitCode}): ${writeResult.result}`,
+    for (const localPath of localFiles) {
+      // Compute the relative path from the runtime folder root, then build
+      // the absolute destination path inside the sandbox.
+      const relative = path.relative(RUNTIME_DIR, localPath)
+      const remotePath = path.posix.join(
+        SANDBOX_GAME_DIR,
+        // Convert Windows backslashes to forward slashes for the remote path.
+        relative.replace(/\\/g, "/"),
       )
+      const remoteDir = path.posix.dirname(remotePath)
+
+      const content = fs.readFileSync(localPath, "utf8")
+      const escaped = shellEscapeForSeed(content)
+
+      const result = await sandbox.process.executeCommand(
+        `mkdir -p '${remoteDir}' && printf '%s' '${escaped}' > '${remotePath}'`,
+      )
+
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `Failed to seed ${relative} (exit ${result.exitCode}): ${result.result}`,
+        )
+      }
+
+      logger.info("createGameSandbox: seeded file", {
+        gameId,
+        sandboxId: sandbox.id,
+        relative,
+        remotePath,
+      })
     }
 
-    logger.info("createGameSandbox: index.html seeded", { gameId, sandboxId: sandbox.id })
+    logger.info("createGameSandbox: all runtime files seeded", {
+      gameId,
+      sandboxId: sandbox.id,
+      fileCount: localFiles.length,
+    })
   } catch (err) {
     logger.error("createGameSandbox: failed to provision sandbox", {
       gameId,
