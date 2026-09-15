@@ -69,16 +69,17 @@ import { createEngine, addAmbientLight, createBox, createHUD,
 \`\`\`
 
 ### Three.js CDN
-All runtime modules import Three.js from the jsDelivr CDN at r180:
+The importmap (required in every \`index.html\`) maps the bare specifier \`"three"\`
+to the jsDelivr CDN. Because of this, **always import Three.js with the bare
+specifier** — it resolves identically to the CDN URL but keeps the import short
+and avoids accidental duplicate module instances:
 \`\`\`js
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+import * as THREE from 'three';
 \`\`\`
-Use the **exact same URL** in the game code to avoid duplicate module instances.
-
-**IMPORTANT — no bare specifiers.**
-The game runs as a browser ES module with no bundler. Bare specifiers like
-\`import * as THREE from 'three'\` are NOT valid in the browser and will throw
-\`"Failed to resolve module specifier 'three'"\`. Always use the full CDN URL above.
+Add this line at the top of the \`<script type="module">\` block whenever game code
+uses the \`THREE\` namespace directly (e.g. \`new THREE.Group()\`, \`THREE.MathUtils\`,
+\`new THREE.Vector3()\`, etc.). If you only call runtime helper functions and never
+reference \`THREE\` yourself, you can omit it — but when in doubt, include it.
 
 ---
 
@@ -114,6 +115,7 @@ specifiers also resolves correctly.
 </head>
 <body>
 <script type="module">
+import * as THREE from 'three';
 import { createEngine } from './runtime/engine.js';
 import { addThreePointLighting } from './runtime/lighting.js';
 import { createBox } from './runtime/models.js';
