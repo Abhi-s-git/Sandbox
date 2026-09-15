@@ -75,6 +75,12 @@ Use this to remove a file that is no longer needed.
 - Handle both keyboard and touch/pointer input when it makes sense for the game.
 - Do not include placeholder comments like "// add game logic here"; write real
   code or leave the section out.
+- **DOM queries must come before any function call that uses them.** Assign all
+  \`document.getElementById\` / \`document.querySelector\` variables at the top of
+  the script, before calling any initialisation function (e.g. \`initGame()\`).
+  Calling an init function before its DOM dependencies are assigned causes
+  \`ReferenceError: Cannot access '...' before initialization\` or silently passes
+  \`null\` into functions that expect an element.
 - **Every \`index.html\` must include this importmap in \`<head>\` before any
   \`<script type="module">\` tag** — no exceptions, even if you don't use Three.js
   directly:

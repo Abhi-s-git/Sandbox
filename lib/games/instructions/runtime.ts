@@ -70,16 +70,20 @@ import { createEngine, addAmbientLight, createBox, createHUD,
 
 ### Three.js CDN
 The importmap (required in every \`index.html\`) maps the bare specifier \`"three"\`
-to the jsDelivr CDN. Because of this, **always import Three.js with the bare
-specifier** — it resolves identically to the CDN URL but keeps the import short
-and avoids accidental duplicate module instances:
+to the jsDelivr CDN.
+
+**This import MUST appear as the first line of every \`<script type="module">\` block,
+without exception — even when the game uses only runtime helper functions:**
 \`\`\`js
 import * as THREE from 'three';
 \`\`\`
-Add this line at the top of the \`<script type="module">\` block whenever game code
-uses the \`THREE\` namespace directly (e.g. \`new THREE.Group()\`, \`THREE.MathUtils\`,
-\`new THREE.Vector3()\`, etc.). If you only call runtime helper functions and never
-reference \`THREE\` yourself, you can omit it — but when in doubt, include it.
+- **Never remove this line.** Runtime modules themselves import Three.js internally;
+  having this import in game code too does not create a duplicate — the browser
+  module cache ensures a single instance is shared.
+- **\`THREE\` is not a global.** Any generated code that references \`THREE.*\`
+  (e.g. \`new THREE.Group()\`, \`new THREE.Vector3()\`, \`THREE.MathUtils\`,
+  \`THREE.MeshStandardMaterial\`, etc.) depends on this import being present.
+  Never assume \`THREE\` is available without it.
 
 ---
 
